@@ -7,6 +7,7 @@ and inserts data from user_data.csv
 import mysql.connector
 from mysql.connector import Error
 import csv
+import uuid
 
 
 # -----------------------------------------------------------
@@ -17,7 +18,7 @@ def connect_db():
         connection = mysql.connector.connect(
             host="localhost",
             user="root",
-            password=""    # add password if you have one
+            password="Bondeni001."    # add password if you have one
         )
         return connection
     except Error as e:
@@ -45,7 +46,7 @@ def connect_to_prodev():
         connection = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="",   # add password if needed
+            password="Bondeni001.",   # add password if needed
             database="ALX_prodev"
         )
         return connection
@@ -79,20 +80,22 @@ def create_table(connection):
 # -----------------------------------------------------------
 # 5. Insert data from CSV file into user_data table
 # -----------------------------------------------------------
+
 def insert_data(connection, csv_file):
     try:
         cursor = connection.cursor()
 
-        with open(csv_file, "r", newline='') as file:
+        with open(csv_file, "r", newline='', encoding='utf-8') as file:
             reader = csv.DictReader(file)
 
             for row in reader:
+                user_id = str(uuid.uuid4())  # generate a UUID for each row
                 cursor.execute(
                     """
                     INSERT IGNORE INTO user_data (user_id, name, email, age)
                     VALUES (%s, %s, %s, %s)
                     """,
-                    (row["user_id"], row["name"], row["email"], row["age"])
+                    (user_id, row["name"], row["email"], row["age"])
                 )
 
         connection.commit()
@@ -104,4 +107,5 @@ def insert_data(connection, csv_file):
 
     except FileNotFoundError:
         print(f"CSV file not found: {csv_file}")
+
 
