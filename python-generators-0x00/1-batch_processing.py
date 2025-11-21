@@ -5,6 +5,8 @@
 
 import mysql.connector
 from mysql.connector import Error
+seed = __import__('seed')
+
 
 def stream_users_in_batches(batch_size):
     """
@@ -15,17 +17,17 @@ def stream_users_in_batches(batch_size):
         connection = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="Bondeni001.",  # Update with your MySQL password
+            password="Bondeni001.",  # update with your MySQL password
             database="ALX_prodev"
         )
         cursor = connection.cursor(dictionary=True)
         cursor.execute("SELECT * FROM user_data")
 
-        while True:
+        while True:  # Single loop
             batch = cursor.fetchmany(batch_size)
             if not batch:
                 break
-            yield batch  # Yield the current batch
+            yield batch  # yield the batch instead of returning
 
         cursor.close()
         connection.close()
@@ -40,6 +42,7 @@ def batch_processing(batch_size):
     yields users over 25 years old.
     """
     for batch in stream_users_in_batches(batch_size):  # Loop 1: batches
-        for user in batch:  # Loop 2: individual users in batch
+        for user in batch:  # Loop 2: users in batch
             if user["age"] > 25:  # Filter condition
-                print(user)  # You can yield instead of print if needed
+                yield user  # <-- use yield instead of print
+
