@@ -1,0 +1,45 @@
+#!/usr/bin/python3
+"""
+1-batch_processing.py - batch processing generator for user_data
+"""
+
+import mysql.connector
+from mysql.connector import Error
+
+def stream_users_in_batches(batch_size):
+    """
+    Generator that fetches rows from user_data in batches.
+    Each batch is a list of dictionaries.
+    """
+    try:
+        connection = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="Bondeni001.",  # Update with your MySQL password
+            database="ALX_prodev"
+        )
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM user_data")
+
+        while True:
+            batch = cursor.fetchmany(batch_size)
+            if not batch:
+                break
+            yield batch  # Yield the current batch
+
+        cursor.close()
+        connection.close()
+
+    except Error as e:
+        print(f"Error: {e}")
+
+
+def batch_processing(batch_size):
+    """
+    Processes each batch from stream_users_in_batches and
+    yields users over 25 years old.
+    """
+    for batch in stream_users_in_batches(batch_size):  # Loop 1: batches
+        for user in batch:  # Loop 2: individual users in batch
+            if user["age"] > 25:  # Filter condition
+                print(user)  # You can yield instead of print if needed
