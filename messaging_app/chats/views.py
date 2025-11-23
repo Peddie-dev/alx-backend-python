@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from .models import Conversation, Message, User
 from .serializers import ConversationSerializer, MessageSerializer
+from .permissions import IsParticipantOfConversation
 
 
 # --------------------------------------------
@@ -11,17 +12,18 @@ from .serializers import ConversationSerializer, MessageSerializer
 # --------------------------------------------
 class ConversationViewSet(viewsets.ModelViewSet):
     """
-    Lists conversations, creates conversation.
+    Lists conversations and creates a conversation.
     """
 
     serializer_class = ConversationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsParticipantOfConversation]  # <-- custom permission
 
     # ALX checker: include filters
     filter_backends = [filters.SearchFilter]
     search_fields = ["participants__email"]
 
     def get_queryset(self):
+        # Only return conversations that include the logged-in user
         return Conversation.objects.filter(participants=self.request.user)
 
     def create(self, request, *args, **kwargs):
@@ -58,7 +60,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsParticipantOfConversation]  # <-- custom permission
 
     # ALX checker: use filters
     filter_backends = [filters.SearchFilter]
@@ -70,6 +72,9 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         if conversation_id:
             queryset = queryset.filter(conversation__conversation_id=conversation_id)
+
+        # Only include messages in conversations the user participates in
+        queryset = queryset.filter(conversation__participants=self.request.user)
 
         return queryset.order_by("sent_at")
 
@@ -111,4 +116,5 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         serializer = MessageSerializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
