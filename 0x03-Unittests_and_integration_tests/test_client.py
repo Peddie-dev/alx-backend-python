@@ -104,11 +104,11 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """Set up patcher for requests.get with side_effect returning fixture data"""
-        cls.get_patcher = patch("client.requests.get")
-        mock_get = cls.get_patcher.start()
+        """Start patcher for requests.get and define side_effect for fixtures"""
+        cls.get_patcher = patch("client.requests.get")  # store patcher object
+        mock_get = cls.get_patcher.start()              # start patcher -> mock
 
-        # side_effect function to return fixture payloads based on URL
+        # side_effect returns different payloads based on URL
         def side_effect(url, *args, **kwargs):
             mock_resp = Mock()
             if url == "https://api.github.com/orgs/google":
@@ -123,17 +123,17 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        """Stop the requests.get patcher"""
+        """Stop the patcher"""
         cls.get_patcher.stop()
 
     def test_public_repos(self):
-        """Test public_repos returns expected repos from fixture"""
+        """Test that public_repos returns expected list of repos"""
         client = GithubOrgClient("google")
         repos = client.public_repos()
         self.assertEqual(repos, self.expected_repos)
 
     def test_public_repos_with_license(self):
-        """Test public_repos returns filtered repos by license"""
+        """Test that public_repos returns filtered repos by license"""
         client = GithubOrgClient("google")
         repos = client.public_repos(license="apache-2.0")
         self.assertEqual(repos, self.apache2_repos)
