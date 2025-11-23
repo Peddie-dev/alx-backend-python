@@ -100,7 +100,7 @@ class OffensiveLanguageMiddleware:
 # ----------------------------
 # Middleware 4: Role-Based Access
 # ----------------------------
-class RolePermissionMiddleware:
+class RolepermissionMiddleware:
     """
     Middleware to restrict access based on user role.
     Only 'admin' or 'moderator' users are allowed.
@@ -113,7 +113,7 @@ class RolePermissionMiddleware:
         if not user.is_authenticated:
             return HttpResponseForbidden("You must be logged in to access this resource.")
 
-        # Check user's role (adjust 'role' field if your User model differs)
+        # Check user's role
         user_role = getattr(user, "role", None)
         if user_role not in ["admin", "moderator"]:
             return HttpResponseForbidden("You do not have permission to perform this action.")
