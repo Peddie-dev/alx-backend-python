@@ -15,5 +15,6 @@ conversations_router.register(r'messages', MessageViewSet, basename='conversatio
 urlpatterns = [
     path('', include(router.urls)),
     path('', include(conversations_router.urls)),
+    path('api/auth/', include(auth_urls)),  # JWT auth endpoints
 ]
 
