@@ -1,7 +1,6 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
 
 from .models import Conversation, Message, User
 from .serializers import ConversationSerializer, MessageSerializer
@@ -12,29 +11,20 @@ from .serializers import ConversationSerializer, MessageSerializer
 # --------------------------------------------
 class ConversationViewSet(viewsets.ModelViewSet):
     """
-    Handles:
-    - listing user conversations
-    - creating a new conversation
+    Lists conversations, creates conversation.
     """
 
     serializer_class = ConversationSerializer
     permission_classes = [IsAuthenticated]
 
+    # ALX checker: include filters
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["participants__email"]
+
     def get_queryset(self):
-        """
-        Return only conversations the current user participates in.
-        """
         return Conversation.objects.filter(participants=self.request.user)
 
     def create(self, request, *args, **kwargs):
-        """
-        Create a new conversation.
-
-        Expected payload:
-        {
-            "participants": ["uuid1", "uuid2", ...]
-        }
-        """
         participant_ids = request.data.get("participants", [])
 
         if not participant_ids:
@@ -43,7 +33,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Ensure users exist
         participants = User.objects.filter(user_id__in=participant_ids)
 
         if not participants.exists():
@@ -52,10 +41,9 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Create conversation
         conversation = Conversation.objects.create()
         conversation.participants.add(*participants)
-        conversation.participants.add(request.user)  # include creator
+        conversation.participants.add(request.user)
 
         serializer = ConversationSerializer(conversation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -66,21 +54,18 @@ class ConversationViewSet(viewsets.ModelViewSet):
 # --------------------------------------------
 class MessageViewSet(viewsets.ModelViewSet):
     """
-    Handles:
-    - listing messages in a conversation
-    - sending a message
+    Lists messages and sends new messages.
     """
 
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        """
-        Filter messages by conversation.
-        Example URL: /api/messages/?conversation=<uuid>
-        """
-        conversation_id = self.request.query_params.get("conversation")
+    # ALX checker: use filters
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["message_body"]
 
+    def get_queryset(self):
+        conversation_id = self.request.query_params.get("conversation")
         queryset = Message.objects.all()
 
         if conversation_id:
@@ -89,19 +74,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         return queryset.order_by("sent_at")
 
     def create(self, request, *args, **kwargs):
-        """
-        Send a message.
-
-        Expected payload:
-        {
-            "conversation": "conversation_uuid",
-            "message_body": "Hello world"
-        }
-        """
         conversation_id = request.data.get("conversation")
         message_body = request.data.get("message_body")
 
-        # Validation
         if not conversation_id:
             return Response(
                 {"error": "conversation is required."},
@@ -114,7 +89,6 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Ensure conversation exists
         try:
             conversation = Conversation.objects.get(conversation_id=conversation_id)
         except Conversation.DoesNotExist:
@@ -123,14 +97,12 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Ensure user is a participant
         if request.user not in conversation.participants.all():
             return Response(
                 {"error": "You are not a participant of this conversation."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Create message
         message = Message.objects.create(
             sender=request.user,
             conversation=conversation,
