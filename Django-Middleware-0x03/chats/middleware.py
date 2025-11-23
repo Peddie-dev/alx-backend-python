@@ -96,3 +96,29 @@ class OffensiveLanguageMiddleware:
             ip = request.META.get("REMOTE_ADDR")
         return ip
 
+
+# ----------------------------
+# Middleware 4: Role-Based Access
+# ----------------------------
+class RolePermissionMiddleware:
+    """
+    Middleware to restrict access based on user role.
+    Only 'admin' or 'moderator' users are allowed.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return HttpResponseForbidden("You must be logged in to access this resource.")
+
+        # Check user's role (adjust 'role' field if your User model differs)
+        user_role = getattr(user, "role", None)
+        if user_role not in ["admin", "moderator"]:
+            return HttpResponseForbidden("You do not have permission to perform this action.")
+
+        response = self.get_response(request)
+        return response
+
+
