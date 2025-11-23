@@ -13,17 +13,18 @@ from .permissions import IsParticipantOfConversation
 class ConversationViewSet(viewsets.ModelViewSet):
     """
     Lists conversations and creates a conversation.
+    Only participants can view or modify conversations.
     """
 
     serializer_class = ConversationSerializer
-    permission_classes = [IsParticipantOfConversation]  # <-- custom permission
+    permission_classes = [IsParticipantOfConversation]
 
     # ALX checker: include filters
     filter_backends = [filters.SearchFilter]
     search_fields = ["participants__email"]
 
     def get_queryset(self):
-        # Only return conversations that include the logged-in user
+        # Only return conversations where the user is a participant
         return Conversation.objects.filter(participants=self.request.user)
 
     def create(self, request, *args, **kwargs):
@@ -56,26 +57,23 @@ class ConversationViewSet(viewsets.ModelViewSet):
 # --------------------------------------------
 class MessageViewSet(viewsets.ModelViewSet):
     """
-    Lists messages and sends new messages.
+    Lists messages, sends new messages, and allows editing/deleting.
+    Only participants of the conversation can access messages.
     """
 
     serializer_class = MessageSerializer
-    permission_classes = [IsParticipantOfConversation]  # <-- custom permission
+    permission_classes = [IsParticipantOfConversation]
 
     # ALX checker: use filters
     filter_backends = [filters.SearchFilter]
     search_fields = ["message_body"]
 
     def get_queryset(self):
+        # Only messages in conversations the user participates in
+        queryset = Message.objects.filter(conversation__participants=self.request.user)
         conversation_id = self.request.query_params.get("conversation")
-        queryset = Message.objects.all()
-
         if conversation_id:
             queryset = queryset.filter(conversation__conversation_id=conversation_id)
-
-        # Only include messages in conversations the user participates in
-        queryset = queryset.filter(conversation__participants=self.request.user)
-
         return queryset.order_by("sent_at")
 
     def create(self, request, *args, **kwargs):
@@ -116,5 +114,6 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         serializer = MessageSerializer(message)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 
 
