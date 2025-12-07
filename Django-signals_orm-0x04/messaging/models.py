@@ -12,8 +12,17 @@ class Message(models.Model):
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
-    # New field to track edits
+    # Track if the message has been edited
     edited = models.BooleanField(default=False)
+
+    # NEW FIELD: who edited the message
+    edited_by = models.ForeignKey(
+        User,
+        related_name='edited_messages',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
     def __str__(self):
         return f"Message {self.id} from {self.sender} to {self.receiver}"
@@ -21,12 +30,22 @@ class Message(models.Model):
 
 class MessageHistory(models.Model):
     """
-    Stores previous versions of a Message before it was edited.
+    Stores previous versions of a Message before it is updated.
     """
     message = models.ForeignKey(
         Message, related_name='history', on_delete=models.CASCADE
     )
     old_content = models.TextField()
+
+    # NEW FIELD: tracks who edited the message when this history record was created
+    edited_by = models.ForeignKey(
+        User,
+        related_name='message_history_entries',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
     edited_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
