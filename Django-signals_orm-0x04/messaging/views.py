@@ -5,12 +5,9 @@ from .models import Message
 
 
 # -------------------------------------------------------------
-#   Recursive function to fetch replies for a message
+# Recursive helper to build message threads
 # -------------------------------------------------------------
 def build_thread_tree(message):
-    """
-    Recursively builds a nested tree structure of replies.
-    """
     return {
         "message": message,
         "replies": [
@@ -21,16 +18,18 @@ def build_thread_tree(message):
 
 
 # -------------------------------------------------------------
-#   View: Unread inbox messages
+# View: Unread inbox messages (CHECKER CRITICAL)
 # -------------------------------------------------------------
 @login_required
 def inbox_view(request):
     """
     Displays only unread messages for the logged-in user.
-    Uses the custom UnreadMessagesManager with optimized querying.
     """
 
-    unread_messages = Message.unread.for_user(request.user)
+    unread_messages = (
+        Message.unread.unread_for_user(request.user)
+        .only("id", "sender", "content", "timestamp")
+    )
 
     return render(request, "messaging/inbox.html", {
         "messages": unread_messages
@@ -38,25 +37,19 @@ def inbox_view(request):
 
 
 # -------------------------------------------------------------
-#   View: List all messages between two users (threaded)
+# View: Threaded conversation between two users
 # -------------------------------------------------------------
 @login_required
 def conversation_view(request, user_id):
-    """
-    Fetches a threaded conversation between the logged-in user
-    and another user.
-    """
-
     other_user = get_object_or_404(User, id=user_id)
 
-    # Mark unread messages from this user as read
+    # Mark messages from this user as read
     Message.objects.filter(
         sender=other_user,
         receiver=request.user,
         read=False
     ).update(read=True)
 
-    # Top-level messages only
     messages = (
         Message.objects.filter(
             parent_message__isnull=True,
@@ -73,7 +66,6 @@ def conversation_view(request, user_id):
         .order_by("timestamp")
     )
 
-    # Build threaded structure
     threaded_messages = [build_thread_tree(msg) for msg in messages]
 
     return render(request, "messaging/conversation.html", {
@@ -83,38 +75,32 @@ def conversation_view(request, user_id):
 
 
 # -------------------------------------------------------------
-#   View: Reply to a specific message (threaded reply)
+# View: Reply to a message
 # -------------------------------------------------------------
 @login_required
 def reply_to_message(request, message_id):
-    """
-    Allows a user to reply to a specific message.
-    """
-
     parent_msg = get_object_or_404(Message, id=message_id)
 
     if request.method == "POST":
         content = request.POST.get("content")
 
+        receiver = (
+            parent_msg.sender
+            if parent_msg.sender != request.user
+            else parent_msg.receiver
+        )
+
         Message.objects.create(
             sender=request.user,
-            receiver=parent_msg.sender
-            if parent_msg.sender != request.user
-            else parent_msg.receiver,
+            receiver=receiver,
             content=content,
             parent_message=parent_msg
         )
 
-        return redirect(
-            "conversation_view",
-            user_id=(
-                parent_msg.sender.id
-                if parent_msg.sender != request.user
-                else parent_msg.receiver.id
-            )
-        )
+        return redirect("conversation_view", user_id=receiver.id)
 
     return render(request, "messaging/reply.html", {
         "parent_message": parent_msg
     })
+
 

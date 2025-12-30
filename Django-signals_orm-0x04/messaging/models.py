@@ -1,17 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-
-
-class UnreadMessagesManager(models.Manager):
-    def for_user(self, user):
-        """
-        Return unread messages for a specific user
-        optimized for inbox display.
-        """
-        return (
-            self.filter(receiver=user, read=False)
-            .only("id", "sender", "content", "timestamp")
-        )
+from .managers import UnreadMessagesManager
 
 
 class Message(models.Model):
@@ -24,7 +13,7 @@ class Message(models.Model):
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
-    # ✅ NEW FIELD → unread / read tracking
+    # REQUIRED FIELD: read / unread tracking
     read = models.BooleanField(default=False)
 
     # Track if edited
@@ -47,15 +36,15 @@ class Message(models.Model):
     )
 
     # Managers
-    objects = models.Manager()            # default
-    unread = UnreadMessagesManager()      # custom
+    objects = models.Manager()              # default manager
+    unread = UnreadMessagesManager()        # custom manager
 
     def __str__(self):
         return f"Message {self.id} from {self.sender} to {self.receiver}"
 
-    # ------------------------------------------------------------------
-    #  RECURSIVE THREAD FETCHING
-    # ------------------------------------------------------------------
+    # -------------------------------------------------------------
+    # Recursive thread fetching
+    # -------------------------------------------------------------
     def get_thread(self):
         return {
             "message": self,
@@ -65,9 +54,9 @@ class Message(models.Model):
             ]
         }
 
-    # ------------------------------------------------------------------
-    #  HIGHLY OPTIMIZED QUERYING FOR UI & API
-    # ------------------------------------------------------------------
+    # -------------------------------------------------------------
+    # Optimized conversation fetch
+    # -------------------------------------------------------------
     @staticmethod
     def fetch_conversation(user1, user2):
         return (
