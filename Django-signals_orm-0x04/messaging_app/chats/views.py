@@ -1,133 +1,94 @@
-from rest_framework import viewsets, status, filters
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-
-from django.utils.decorators import method_decorator
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
 from django.views.decorators.cache import cache_page
+from django.contrib.auth.models import User
 
-from .models import Conversation, Message, User
-from .serializers import ConversationSerializer, MessageSerializer
-from .permissions import IsParticipantOfConversation
+from .models import Message
 
 
-# --------------------------------------------
-# Conversation ViewSet
-# --------------------------------------------
-class ConversationViewSet(viewsets.ModelViewSet):
+# Recursive helper to build threaded messages
+def build_thread_tree(message):
+    return {
+        "message": message,
+        "replies": [
+            build_thread_tree(reply)
+            for reply in message.replies.all().order_by("timestamp")
+        ]
+    }
+
+
+# View: Inbox (unread messages)
+@login_required
+def inbox_view(request):
+    unread_messages = (
+        Message.unread.unread_for_user(request.user)
+        .only("id", "sender", "content", "timestamp")
+    )
+    return render(request, "messaging/inbox.html", {
+        "messages": unread_messages
+    })
+
+
+# View: Threaded conversation (cached for 60 seconds)
+@cache_page(60)  # ✅ Cache timeout 60 seconds
+@login_required
+def conversation_view(request, user_id):
     """
-    Lists conversations and creates a conversation.
-    Only participants can view or modify conversations.
+    Displays a threaded conversation between the logged-in user and another user.
+    Cached for 60 seconds.
     """
+    other_user = get_object_or_404(User, id=user_id)
 
-    serializer_class = ConversationSerializer
-    permission_classes = [IsParticipantOfConversation]
+    # Mark messages from this user as read
+    Message.objects.filter(
+        sender=other_user,
+        receiver=request.user,
+        read=False
+    ).update(read=True)
 
-    # ALX checker: include filters
-    filter_backends = [filters.SearchFilter]
-    search_fields = ["participants__email"]
+    messages = Message.objects.filter(
+        parent_message__isnull=True,
+        sender__in=[request.user, other_user],
+        receiver__in=[request.user, other_user]
+    ).select_related(
+        "sender", "receiver", "edited_by"
+    ).prefetch_related(
+        "replies",
+        "replies__sender",
+        "replies__receiver",
+        "replies__edited_by"
+    ).order_by("timestamp")
 
-    def get_queryset(self):
-        # Only return conversations where the user is a participant
-        return Conversation.objects.filter(participants=self.request.user)
+    threaded_messages = [build_thread_tree(msg) for msg in messages]
 
-    def create(self, request, *args, **kwargs):
-        participant_ids = request.data.get("participants", [])
-
-        if not participant_ids:
-            return Response(
-                {"error": "Participants list cannot be empty."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        participants = User.objects.filter(user_id__in=participant_ids)
-
-        if not participants.exists():
-            return Response(
-                {"error": "One or more users do not exist."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        conversation = Conversation.objects.create()
-        conversation.participants.add(*participants)
-        conversation.participants.add(request.user)
-
-        serializer = ConversationSerializer(conversation)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return render(request, "messaging/conversation.html", {
+        "threaded_messages": threaded_messages,
+        "other_user": other_user
+    })
 
 
-# --------------------------------------------
-# Message ViewSet (CACHED)
-# --------------------------------------------
-@method_decorator(cache_page(60), name="list")
-class MessageViewSet(viewsets.ModelViewSet):
-    """
-    Lists messages, sends new messages, and allows editing/deleting.
-    Only participants of the conversation can access messages.
+# View: Reply to a message
+@login_required
+def reply_to_message(request, message_id):
+    parent_msg = get_object_or_404(Message, id=message_id)
 
-    The list view is cached for 60 seconds.
-    """
+    if request.method == "POST":
+        content = request.POST.get("content")
+        receiver = parent_msg.sender if parent_msg.sender != request.user else parent_msg.receiver
 
-    serializer_class = MessageSerializer
-    permission_classes = [IsParticipantOfConversation]
-
-    # ALX checker: use filters
-    filter_backends = [filters.SearchFilter]
-    search_fields = ["message_body"]
-
-    def get_queryset(self):
-        # Only messages in conversations the user participates in
-        queryset = Message.objects.filter(
-            conversation__participants=self.request.user
-        )
-
-        conversation_id = self.request.query_params.get("conversation")
-        if conversation_id:
-            queryset = queryset.filter(
-                conversation__conversation_id=conversation_id
-            )
-
-        return queryset.order_by("sent_at")
-
-    def create(self, request, *args, **kwargs):
-        conversation_id = request.data.get("conversation")
-        message_body = request.data.get("message_body")
-
-        if not conversation_id:
-            return Response(
-                {"error": "conversation is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not message_body:
-            return Response(
-                {"error": "message_body cannot be empty."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            conversation = Conversation.objects.get(
-                conversation_id=conversation_id
-            )
-        except Conversation.DoesNotExist:
-            return Response(
-                {"error": "Conversation does not exist."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if request.user not in conversation.participants.all():
-            return Response(
-                {"error": "You are not a participant of this conversation."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        message = Message.objects.create(
+        Message.objects.create(
             sender=request.user,
-            conversation=conversation,
-            message_body=message_body,
+            receiver=receiver,
+            content=content,
+            parent_message=parent_msg
         )
 
-        serializer = MessageSerializer(message)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return redirect("conversation_view", user_id=receiver.id)
+
+    return render(request, "messaging/reply.html", {
+        "parent_message": parent_msg
+    })
+
 
 
 
